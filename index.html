@@ -203,7 +203,7 @@
     </div>
     <div class="grid" id="grid"></div>
     <button class="foldbtn" id="btnFold">展开全部 330 题</button>
-    <p class="hint" style="margin-top:10px">键盘：A / B / C / D 选择选项（判断题 A=正确、B=错误） · ← → 切换题目 · 手机可左右滑动</p>
+    <p class="hint" style="margin-top:10px">键盘：1 / 2 / 3 / 4 或 A / B / C / D 选择选项（判断题 1=正确、2=错误） · Enter 下一题 · ← → 切换题目 · 手机可左右滑动</p>
   </section>
 </div>
 
@@ -575,10 +575,26 @@ function applyFold(){
 }
 document.getElementById('btnFold').onclick=()=>{ folded=!folded; applyFold(); };
 
+const NUM_KEY={ '1':'A', '2':'B', '3':'C', '4':'D', '5':'E', '6':'F', '7':'G' };
 document.addEventListener('keydown',e=>{
+  const tag=(e.target.tagName||'').toLowerCase();
+  if(tag==='input'||tag==='select'||tag==='textarea') return;
+
+  if(e.key==='Enter'){
+    if(tag==='button') return;          // 焦点在按钮上时不抢回车
+    e.preventDefault();
+    nextQ();
+    return;
+  }
+  if(e.key===' ' && tag!=='button'){
+    e.preventDefault();
+    nextQ();
+    return;
+  }
+
   const q=DATA[cur];
   if((q.type==='choice'||q.type==='judge') && (!saved[q.num] || !saved[q.num].pick)){
-    const L=e.key.toUpperCase();
+    const L=NUM_KEY[e.key] || e.key.toUpperCase();
     if(q.options.some(o=>o.label===L)){ choose(L); return; }
   }
   if(e.key==='ArrowRight'){ nextQ(); }
