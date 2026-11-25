@@ -114,7 +114,27 @@
        background:#fff;word-break:break-word}
   .judgebar{display:flex;gap:12px;margin-top:14px}
   .judgebar .btn{flex:1}
-  .judgetip{font-size:12.5px;color:var(--muted);margin-top:10px;text-align:center}
+
+  .notes{margin-top:18px;border:1px solid var(--line);border-radius:14px;background:#fbfcfe;overflow:hidden}
+  .notes-toggle{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;
+       padding:12px 16px;font-family:inherit;font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;text-align:left}
+  .notes-toggle.open{color:var(--accent)}
+  .notes-toggle .dot{width:7px;height:7px;border-radius:50%;background:#d92b2b;display:none;flex:0 0 auto}
+  .notes-toggle.has .dot{display:inline-block}
+  .notes-toggle .arrow{margin-left:auto;width:8px;height:8px;border-right:2px solid currentColor;
+       border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform .2s ease}
+  .notes-toggle.open .arrow{transform:rotate(-135deg)}
+  .notes-body{border-top:1px solid var(--line);padding:12px 14px;background:#fff}
+  .notes textarea{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+       font-family:inherit;font-size:15.5px;line-height:1.7;resize:vertical;min-height:96px;
+       color:#d92b2b;font-weight:700;background:#fffafa;outline:none;display:block}
+  .notes textarea::placeholder{color:#b9a4a4;font-weight:400}
+  .notes textarea:focus{border-color:#b9c4ea;background:#fff}
+  .notes-hint{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-top:6px}
+  .notes-hint .saved{color:var(--ok);visibility:hidden}
+  .cell{position:relative}
+  .cell.has-note::after{content:'';position:absolute;top:4px;right:4px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+
   .navgrid{margin-top:22px}
   .navgrid h3{font-size:14px;color:var(--muted);margin:0 0 10px;font-weight:700}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(42px,1fr));gap:7px}
@@ -157,6 +177,7 @@
     .candbank{grid-template-columns:1fr}
     .mode{font-size:13px;padding:9px 4px}
     .navgrid{margin-top:18px}
+    .notes textarea{font-size:16px}
   }
 </style>
 </head>
@@ -219,6 +240,71 @@ const STORE = {
   save(o){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(o)); }catch(e){} }
 };
 const saved = STORE.load();
+const NOTES_KEY = 'os_quiz_notes_v3';
+let NOTES = {};
+try{ NOTES = JSON.parse(localStorage.getItem(NOTES_KEY) || '{}') || {}; }catch(e){ NOTES = {}; }
+function saveNote(num, txt){
+  txt = String(txt == null ? '' : txt);
+  if(txt.trim()) NOTES[num] = txt; else delete NOTES[num];
+  try{ localStorage.setItem(NOTES_KEY, JSON.stringify(NOTES)); }catch(e){}
+}
+function hasNote(num){ return !!(NOTES[num] && NOTES[num].trim()); }
+const noteOpen = new Set();
+function markNoteCell(num){
+  const list = orderList();
+  const idx = DATA.findIndex(q=>q.num===num);
+  const pos = list.indexOf(idx);
+  if(pos < 0) return;
+  const cells = document.querySelectorAll('#grid .cell');
+  const c = cells[pos];
+  if(!c) return;
+  c.classList.toggle('has-note', hasNote(num));
+}
+function renderNotes(q){
+  const card = document.getElementById('card');
+  const txt = NOTES[q.num] || '';
+  const box = el('div','notes');
+
+  const btn = el('button','notes-toggle' + (noteOpen.has(q.num) ? ' open' : '') + (txt.trim() ? ' has' : ''));
+  btn.innerHTML = '<span>备注</span><span class="dot"></span><span class="arrow"></span>';
+
+  const body = el('div','notes-body');
+  const ta = document.createElement('textarea');
+  ta.rows = 4;
+  ta.placeholder = '在这里记笔记，边打字边自动保存…';
+  ta.value = txt;
+
+  const hint = el('div','notes-hint');
+  const left = el('span','','自动保存在本机浏览器，不影响作答记录');
+  const right = el('span','saved','已保存');
+  hint.appendChild(left); hint.appendChild(right);
+
+  ta.addEventListener('input', ()=>{
+    saveNote(q.num, ta.value);
+    btn.classList.toggle('has', hasNote(q.num));
+    right.style.visibility = 'visible';
+    markNoteCell(q.num);
+  });
+  ta.addEventListener('blur', ()=>{ saveNote(q.num, ta.value); });
+
+  body.appendChild(ta); body.appendChild(hint);
+
+  const open = noteOpen.has(q.num) || !!txt.trim();
+  body.style.display = open ? 'block' : 'none';
+  btn.classList.toggle('open', open);
+
+  btn.onclick = ()=>{
+    const show = body.style.display === 'none';
+    body.style.display = show ? 'block' : 'none';
+    btn.classList.toggle('open', show);
+    if(show){ noteOpen.add(q.num); ta.focus(); }
+    else { noteOpen.delete(q.num); }
+  };
+
+  box.appendChild(btn); box.appendChild(body);
+  card.appendChild(box);
+}
+
 // 每次打开都按当前答案重算对错，避免答案修订后旧记录判分错乱
 DATA.forEach(q=>{
   const s = saved[q.num];
@@ -458,6 +544,7 @@ function render(){
   else {
     renderBig(q, s);
   }
+  renderNotes(q);
   // prev / next
   const nav=el('div','nav');
   const prev=el('button','btn','← 上一题'); prev.disabled = p<=0;
@@ -507,6 +594,7 @@ function refreshGrid(){
     const q=DATA[idx]; const s=saved[q.num];
     const c=el('div','cell', String(q.num));
     if(s && typeof s.ok==='boolean') c.classList.add(s.ok?'done-ok':'done-bad');
+    if(hasNote(q.num)) c.classList.add('has-note');
     if(idx===cur) c.classList.add('cur');
     c.onclick=()=>{ const p=list.indexOf(idx); if(p>=0) go(p); };
     g.appendChild(c);
